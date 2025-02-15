@@ -14,6 +14,10 @@ import time
 
 def main():
     while True:
+        print("7 Days to Die Server Manager")
+        print("============================")
+        print("Choose an option:")
+        print("")
         print("1. Install")
         print("2. Update")
         print("3. Start")
