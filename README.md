@@ -17,3 +17,34 @@ Version 0.0.0.1
 - [✅] Graceful shutdown of server initiated from SM
 - [✅] Restart if game crashes
 - [✅] Separate error log. 20 lines, 5x separated, if WRN,ERR, Exception
+
+Version 0.0.0.2
+- [] Donor buffer has to be created
+- [] See if webmap exists already before rewriting
+- [] Command to print out all expired claims for admins to hunt down
+- [] Donor slot system/vip system
+- [] Reset Region Functionality
+- [] Server Messages
+- [] 
+
+
+Version 0.0.0.3
+- [] Staff or Hard teleports (ftw/type)
+- [] Discord Integration
+
+Version 0.0.0.4
+- [] Player teleports
+
+
+To Do List:
+Reset Regions
+Webmap
+Expired landclaim view
+Discord integration
+Giveplus
+Reset Level
+Reset Skills
+Zombie spawner for admins
+Server messages
+Chat colors
+Vehice Retrieval
