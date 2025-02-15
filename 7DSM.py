@@ -12,7 +12,6 @@ import subprocess
 import shutil
 import time
 
-
 def main():
     while True:
         print("1. Install")
@@ -186,7 +185,7 @@ def launch_and_install(steamcmd_path):
 
 def start():
     # Path to the 7 Days to Die Dedicated Server executable
-    server_path = os.path.join("steamcmd", "steamapps", "common", "7 Days to Die Dedicated Server")
+    server_path = os.path.join("Server")
     executable = os.path.join(server_path, "7DaysToDieServer.exe")
     
     # Check if the dedicated server executable exists, if not, fall back to 7DaysToDie.exe
@@ -241,7 +240,6 @@ def start():
     print("Server running in background, you can close this window.")
     print("You can check the task manager to confirm the server process is running.")
     print("Press any key to return to the main menu.")
-
 
 if __name__ == "__main__":
     main()
