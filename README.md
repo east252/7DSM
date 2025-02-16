@@ -1,6 +1,13 @@
 # 7DSM
 7 Days to Die Server Manager
 
+# Prerequisites:
+1. Install python from microsoft store. 3.12 preferably.  
+2. Install Visual C++ Redistributable "https://aka.ms/vs/17/release/vc_redist.x64.exe"  
+3. Place the program (7DSM.py) in a folder (this is your working folder).
+4. When steamcmd and server are installed, they will sit beside this folder.
+5. Install the prerequisites using python. The command is python -m pip install -r requirements.txt
+
 Version 0.0.0.1
 - [✅] virtual environment
 - [✅] gitignore the steamcmd and server files
@@ -26,11 +33,13 @@ Version 0.0.0.2
 - [] Reset Region Functionality
 - [] Server Messages
 - [] Save and backup systems
+- [] Change C++ redist from menu to auto install
 
 
 Version 0.0.0.3
 - [] Staff or Hard teleports (ftw/type)
 - [] Discord Integration
+- [] Ping ban
 
 Version 0.0.0.4
 - [] Player teleports
