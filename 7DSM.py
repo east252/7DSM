@@ -1,39 +1,3 @@
-# ----- Introduction  -----------------------------------------------------------------------------
-# 7 Days Server Manager 
-# Version: 0.0.1
-# Author: Njinir
-# Created: 2025
-# Primal Rage Gaming
-
-# This is a Python script for a 7 Days to Die server manager. 
-# It uses the 7 Days to Die server API to manage the server. 
-# It can start, stop, restart, and update the server. 
-
-# ----- Prerequistes -------------------------------------------------------------------------------
-""" TODO: Prerequisites:
-1. Install python from microsoft store. 3.12 preferably.  
-2. Install Visual C++ Redistributable "https://aka.ms/vs/17/release/vc_redist.x64.exe"  
-3. Place the program (7DSM.py) in a folder (this is your working folder).
-4. When steamcmd and server are installed, they will sit beside this folder.
-5. Install the prerequisites using python.
-6. Create a .env file in the working folder. (This is for your variables/settings)
-    NOTE: The .env file is customizable. Add any variables you want to change.
-7. Use python's pip to install the prerequisites: python -m pip install -r requirements.txt
-
-Example .env file:
-
-# Server Config Variables (overwrites serverconfig.xml. Add any others as needed.)
-SERVERCONFIG_LandClaimCount="5"
-SERVERCONFIG_LootAbundance="200"
-SERVERCONFIG_GameDifficulty="3"
-SERVERCONFIG_ServerName="Njinir"
-SERVERCONFIG_ServerPassword="MySecretPassword123"
-SERVERCONFIG_ServerMaxPlayerCount="10"
-SERVERCONFIG_WebDashboardEnabled="true"
-SERVERCONFIG_TerminalWindowEnabled="true"
-SERVERCONFIG_UserDataFolder="./UserDataFolder"
-"""
-
 # ----- Libraries ------------------------------------------------------------------------------------
 import asyncio
 import collections
@@ -41,15 +5,21 @@ import os
 import psutil
 import re
 import requests
+import shutil
 import subprocess
 import sys
+import tarfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 import zipfile
+
 from dotenv import load_dotenv
+import zstandard as zstd  # ✅ High-speed compression
 
 
 # ----- Global Variables -----------------------------------------------------------------------------
+load_dotenv() # ✅ Load .env variables globally
 SERVER_APP_ID = "294420"
 SERVER_DIR = os.path.abspath("Server")
 STEAMCMD_DIR = "steamcmd"
@@ -91,22 +61,32 @@ def install_steam():
         return
 
 def install_server():
-    """Installs the 7 Days to Die server using SteamCMD."""
+    """Installs the 7 Days to Die server using SteamCMD, with optional experimental version."""
     if not os.path.exists(STEAMCMD_EXE):
         print("❌ SteamCMD is not installed. Please run the install command first.")
         return
 
     print("🚀 Installing 7 Days to Die server...")
 
+    # ✅ Check if we should install the experimental version
+    install_experimental = os.getenv("INSTALLCONFIG_Experimental", "false").lower() == "true"
+
+    # ✅ Build the SteamCMD command
+    steamcmd_command = [
+        STEAMCMD_EXE, 
+        "+force_install_dir", SERVER_DIR, 
+        "+login", "anonymous", 
+        "+app_update", SERVER_APP_ID, "validate"
+    ]
+
+    if install_experimental:
+        steamcmd_command.append("-beta latest_experimental")  # ✅ Enable experimental build
+
+    steamcmd_command.append("+exit")  # ✅ Prevents auto-starting the server
+
     try:
         process = subprocess.Popen(
-            [
-                STEAMCMD_EXE, 
-                "+force_install_dir", SERVER_DIR, 
-                "+login", "anonymous", 
-                "+app_update", SERVER_APP_ID, 
-                "+quit"
-            ],
+            steamcmd_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -117,47 +97,44 @@ def install_server():
             print(line, end='')
 
         process.wait()
-
         stderr_output = process.stderr.read().strip()
 
-        # Only show an error if installation actually failed
-        if process.returncode != 0 and "Update complete" not in stderr_output:
+        if process.returncode != 0 and not any(keyword in stderr_output for keyword in ["Update complete", "Cleaning up", "Installing update"]):
             print(f"❌ Error during installation: {stderr_output}")
         else:
-            print("✅ 7 Days to Die installation complete.")
-
-        # If launch fails, provide an explanation instead of an error message
-        if "Update complete, launching..." in stderr_output:
-            print("⚠ Skipping launch: Server configuration is not set up yet.")
+            print("✅ 7 Days to Die installation complete. The server was NOT launched.")
 
     except Exception as e:
         print(f"❌ An error occurred: {e}")
 
-    print("Returning to main menu.")
 
 def update():
-    """Updates the 7 Days to Die server using SteamCMD."""
+    """Updates the 7 Days to Die server using SteamCMD, with optional experimental version."""
     if not os.path.exists(STEAMCMD_EXE):
         print("❌ SteamCMD is not installed. Please run the install process first.")
         return
 
-    # Confirmation prompt
-    choice = input("⚠ Are you sure you want to update the server? This may take time. (Y/N): ").strip().lower()
-    if choice != "y":
-        print("❌ Update canceled.")
-        return
+    # ✅ Check if we should install the experimental version
+    install_experimental = os.getenv("INSTALLCONFIG_Experimental", "false").lower() == "true"
+
+    # ✅ Build the SteamCMD command
+    steamcmd_command = [
+        STEAMCMD_EXE, 
+        "+force_install_dir", SERVER_DIR, 
+        "+login", "anonymous", 
+        "+app_update", SERVER_APP_ID, "validate"
+    ]
+
+    if install_experimental:
+        steamcmd_command.append("-beta latest_experimental")  # ✅ Enable experimental build
+
+    steamcmd_command.append("+exit")  # ✅ Prevents auto-starting the server
 
     print("🚀 Updating 7 Days to Die server...")
 
     try:
         process = subprocess.Popen(
-            [
-                STEAMCMD_EXE, 
-                "+force_install_dir", SERVER_DIR, 
-                "+login", "anonymous", 
-                "+app_update", SERVER_APP_ID, "validate", 
-                "+quit"
-            ],
+            steamcmd_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -168,10 +145,8 @@ def update():
             print(line, end='')
 
         process.wait()
-
         stderr_output = process.stderr.read().strip()
 
-        # Only show an error if the update actually failed
         if process.returncode != 0 and "Update complete" not in stderr_output:
             print(f"❌ Error during update:\n{stderr_output}")
         else:
@@ -179,25 +154,21 @@ def update():
 
     except Exception as e:
         print(f"❌ Error launching SteamCMD: {e}")
-    
-    print("Returning to main menu.")
-
 
 async def start():
-    """Starts the 7DTD server with settings loaded from .env."""
+    """Starts the 7DTD server with settings from global variables."""
     server_config_override()  # ✅ Ensure the config is updated before launch
 
-    server_path = os.path.abspath("Server")
-    executable = os.path.join(server_path, os.getenv("SERVER_EXE", "7DaysToDieServer.exe"))
+    executable = os.path.join(SERVER_DIR, SERVER_EXE)  # ✅ Corrected to use global variable
 
     if not os.path.exists(executable):
         print(f"❌ Error: {executable} not found.")
         return
 
-    logs_dir = os.path.join(server_path, "Logs")
+    logs_dir = os.path.join(SERVER_DIR, "Logs")
     os.makedirs(logs_dir, exist_ok=True)
 
-    config_file = os.path.join(server_path, "serverconfig.xml")
+    config_file = os.path.join(SERVER_DIR, "serverconfig.xml")
     if not os.path.exists(config_file):
         print("❌ Error: serverconfig.xml not found.")
         return
@@ -215,8 +186,11 @@ async def start():
         "-dedicated"
     ]
 
+    print("🔍 Launching monitor_server()...")
+    threading.Thread(target=lambda: asyncio.run(monitor_server()), daemon=True).start()  # ✅ Ensures monitoring is always running
+
     try:
-        os.chdir(server_path)
+        os.chdir(SERVER_DIR)
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -227,12 +201,20 @@ async def start():
 
         print("✅ Server started successfully.")
 
+        # ✅ **CALL THE LOGGING FUNCTION**
+        threading.Thread(target=stream_logs_to_files, args=(process, main_log_path, error_log_path), daemon=True).start()
+
+        # ✅ Return to the main menu after starting the server
+        await main_menu()
+
     except Exception as e:
         print(f"❌ Error launching the server: {e}")
 
 
+
+
 def server_config_override():
-    """Overrides serverconfig.xml settings with values from .env."""
+    """Ensures serverconfig.xml matches the values from .env by updating, adding missing entries, and cleaning up formatting."""
 
     if not os.path.exists(SERVER_CONFIG_PATH):
         print("❌ serverconfig.xml not found. Cannot override settings.")
@@ -240,7 +222,8 @@ def server_config_override():
 
     print("🔧 Updating serverconfig.xml...")
 
-    # Read all .env variables that start with "SERVERCONFIG_"
+
+    # ✅ Read all .env variables that start with "SERVERCONFIG_"
     server_config_vars = {
         key.replace("SERVERCONFIG_", "").lower(): value
         for key, value in os.environ.items() if key.startswith("SERVERCONFIG_")
@@ -252,25 +235,28 @@ def server_config_override():
 
     updated_keys = set()
 
-    # Update existing properties
+    # ✅ Step 1: Update existing properties
     for prop in root.findall("property"):
         name = prop.get("name", "").lower()
         if name in server_config_vars:
             prop.set("value", server_config_vars[name])
             updated_keys.add(name)
 
-    # Add missing properties
+    # ✅ Step 2: Add missing properties
     for key, value in server_config_vars.items():
         if key not in updated_keys:
             ET.SubElement(root, "property", name=key, value=value)
 
-    # Convert tree to formatted XML
+    # ✅ Step 3: Format the XML properly
     xml_string = ET.tostring(root, encoding="unicode")
 
-    # Force `</ServerSettings>` to a new line
+    # ✅ Force `</ServerSettings>` onto a new line
     xml_string = re.sub(r"(\s*)</ServerSettings>", r"\n</ServerSettings>", xml_string)
 
-    # Properly indent `<property>` entries
+    # ✅ Remove extra blank lines
+    xml_string = re.sub(r"\n\s*\n", "\n", xml_string)
+
+    # ✅ Ensure proper indentation for `<property>` entries
     formatted_lines = []
     for line in xml_string.splitlines():
         stripped_line = line.strip()
@@ -282,58 +268,81 @@ def server_config_override():
         else:
             formatted_lines.append(line)
 
+    # ✅ Save the cleaned-up XML file
     with open(SERVER_CONFIG_PATH, "w", encoding="utf-8") as file:
         file.write("\n".join(formatted_lines) + "\n")
 
     print("✅ serverconfig.xml updated successfully.")
 
+import threading
+
 async def monitor_server():
     """Continuously checks if the server is running and restarts if it stops."""
-    server_exe = os.getenv("SERVER_EXE", "7DaysToDieServer.exe")
-    server_path = os.path.abspath("Server")
-    executable = os.path.join(server_path, server_exe)
+    print("🛠️ Server monitoring started...")
 
     while True:
-        # Check if the server process is running
-        server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
+        # ✅ Check if the server process is running
+        server_running = any(
+            proc.info["name"].lower() == "7daystodieserver.exe"
+            for proc in psutil.process_iter(["name"])
+        )
 
         if not server_running:
-            print("❌ Server process not found. Restarting server...")
-            await start()  # ✅ Restart the server
+            print("\n\n❌ Server has stopped! Attempting restart...")
+            await asyncio.sleep(5)  # ✅ Short delay before retrying
 
-        time.sleep(10)  # ✅ Check every 10 seconds
+            # ✅ Double-check if the server is still down before restarting
+            server_running = any(
+                proc.info["name"].lower() == "7daystodieserver.exe"
+                for proc in psutil.process_iter(["name"])
+            )
+
+            if not server_running:
+                print("🔄 Restarting the server...")
+                
+                # ✅ Corrected executable path
+                executable = os.path.join(SERVER_DIR, SERVER_EXE)
+
+                if not os.path.exists(executable):
+                    print(f"❌ Error: {executable} not found. Restart failed.")
+                else:
+                    threading.Thread(target=lambda: asyncio.run(start()), daemon=True).start()
+                    print("✅ Server restart triggered. Returning to menu.")
+
+        await asyncio.sleep(10)  # ✅ Check every 10 seconds (non-blocking)
+  # ✅ Check every 10 seconds (non-blocking)
+
+def restart_server():
+    """Restarts the server process."""
+    print("🔄 Restarting the server...")
+
+    try:
+        start()  # ✅ Call `start()` directly (it's now synchronous)
+        print("✅ Server restart triggered.")
+ 
+    except Exception as e:
+        print(f"\n\n❌ Error restarting the server: {e}")
 
 async def stop():
-    """Stops the game server gracefully if possible, otherwise forces termination."""
-    server_exe = os.getenv("SERVER_EXE", "7DaysToDieServer.exe")
+    """Immediately stops the game server without a graceful shutdown (Version 1)."""
 
-    # Step 1: Check if the server is running
+    # Use the global variable SERVER_EXE
+    server_exe = SERVER_EXE
+
+    # Check if the server is running
     server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
 
     if not server_running:
         print("⚠ Server is not running.")
-        return
+        sys.exit()  # ✅ Exit the program if the server is not running
 
-    print("⚠ Initiating server shutdown...")
+    print("⚠ Initiating immediate server shutdown...")
 
-    # Step 2: Attempt a graceful shutdown
-    try:
-        await send_shutdown_command()  # ✅ Implement this to send a shutdown command via Web API
-        print("⏳ Waiting 10 seconds for the server to shut down...")
-        time.sleep(10)
-    except Exception as e:
-        print(f"❌ Error attempting graceful shutdown: {e}")
-
-    # Step 3: Check if the server is still running
-    server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
-
-    if server_running:
-        print("❌ Server did not shut down. Forcing termination...")
-        kill_server_process()
+    # Directly force-terminate the server
+    kill_server_process()
 
     print("✅ Server stopped.")
-    sys.exit(0)
-
+    sys.exit()  # ✅ Exit the program after stopping the server
 
 def kill_server_process():
     """Finds and forcefully kills the server process."""
@@ -342,68 +351,152 @@ def kill_server_process():
             print(f"🚨 Terminating process: {SERVER_EXE}")
             process.terminate()
 
+def backup():
+    """Creates a highly compressed backup based on .env settings, allowing subdirectory backups."""
+    load_dotenv()  # ✅ Ensure .env is loaded
 
-def restart():
-    pass
+    print("🔄 Starting backup process...")
 
-def server_backup():
-    pass
+    # Record the start time
+    start_time = time.time()
+
+    # ✅ Read .env variables for backup configuration
+    backup_targets = {
+        key.replace("BACKUPCONFIG_", "").lower(): value.lower() == "true"
+        for key, value in os.environ.items() if key.startswith("BACKUPCONFIG_")
+    }
+
+    # ✅ Define paths
+    working_dir = os.getcwd()
+    server_dir = os.path.join(working_dir, "Server")  # ✅ Scan inside `Server/`
+    
+    if not os.path.exists(server_dir):
+        print("❌ Server directory not found. Backup cannot proceed.")
+        return
+
+    # ✅ Get all top-level items in `Server/` (case-insensitive)
+    server_items = {item.lower(): os.path.join(server_dir, item) for item in os.listdir(server_dir)}
+
+    # ✅ List of items to back up
+    backup_items = []
+
+    # ✅ Always include .env from working directory
+    env_path = os.path.join(working_dir, ".env")
+    if os.path.exists(env_path):
+        print("✅ Including .env in backup.")
+        backup_items.append(env_path)
+
+    # ✅ Check for each required backup item inside `Server/`
+    for key, should_backup in backup_targets.items():
+        if should_backup:
+            # ✅ Handle subdirectories using `_` notation
+            key_parts = key.split("_")  # Example: Data_Worlds → ["data", "worlds"]
+            matched_path = server_dir
+
+            for part in key_parts:
+                matched_path = os.path.join(matched_path, part)
+
+            if os.path.exists(matched_path):
+                print(f"✅ Including {matched_path} in backup.")
+                backup_items.append(matched_path)
+            else:
+                print(f"⚠ Skipping {key.replace('_', '/')} : Not found in Server directory.")
+
+    if not backup_items:
+        print("❌ No items to back up. Exiting backup process.")
+        return
+
+    # ✅ Define backup filename
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    backup_filename = f"backup_{timestamp}.tar.zst"
+    backup_path = os.path.join(working_dir, backup_filename)
+
+    print(f"📦 Creating backup: {backup_filename}")
+
+    try:
+        tar_filename = f"backup_{timestamp}.tar"
+        tar_path = os.path.join(working_dir, tar_filename)
+
+        # ✅ Create a .tar file
+        with tarfile.open(tar_path, "w") as tar:
+            for item in backup_items:
+                tar.add(item, arcname=os.path.relpath(item, start=working_dir))  # ✅ Preserve folder structure in tar
+
+        # ✅ Compress the .tar file using streaming zstd
+        with open(tar_path, "rb") as tar_file, open(backup_path, "wb") as compressed_backup:
+            cctx = zstd.ZstdCompressor(level=10)
+            with cctx.stream_writer(compressed_backup) as compressor:
+                shutil.copyfileobj(tar_file, compressor)  # ✅ Stream-based compression
+
+        # ✅ Cleanup the .tar file after compression
+        os.remove(tar_path)
+
+        print(f"✅ Backup completed successfully: {backup_filename}")
+
+    except Exception as e:
+        print(f"❌ Error creating backup: {e}")
+
+    # Record the end time
+    end_time = time.time()
+
+    # Calculate and print the elapsed time
+    elapsed_time = end_time - start_time
+    print(f"⏱️ Backup process took {elapsed_time:.2f} seconds.")
 
 def stream_logs_to_files(proc, main_log, error_log):
-    """Streams server logs to separate main and error log files."""
+    """Streams server logs to separate files in real-time."""
     CONTEXT_SIZE = 20
     prev_lines = collections.deque(maxlen=CONTEXT_SIZE)
-    
+
     # Improved regex to exclude less critical warnings
     error_regex = re.compile(r'\b(ERR|EXCEPTION|CRITICAL|FATAL|ERROR)\b', re.IGNORECASE)
-    
+
     # Track the last error to prevent duplicates
     last_error_message = None
 
     with open(main_log, 'w', encoding='utf-8') as main_f, \
          open(error_log, 'w', encoding='utf-8') as err_f:
 
-        while True:
-            line = proc.stdout.readline()
+        for line in iter(proc.stdout.readline, ''):  # ✅ Reads output in real-time
             if not line and proc.poll() is not None:
                 break
 
             line_stripped = line.strip()
 
-            # Ignore shader warnings/errors
-            if line_stripped.startswith("WARNING: Shader") or line_stripped.startswith("ERROR: Shader"):
+            # ✅ Ignore shader warnings/errors
+            if "Shader" in line_stripped:
                 continue
 
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-            out_line = f"[{timestamp}] {line}"
+            formatted_line = f"[{timestamp}] {line}"
 
-            main_f.write(out_line)
+            # ✅ Write to main log
+            main_f.write(formatted_line)
             main_f.flush()
-            prev_lines.append(out_line)
 
-            # Detect critical errors & prevent duplicate consecutive errors
+            prev_lines.append(formatted_line)
+
+            # ✅ Write errors to error log
             if error_regex.search(line_stripped):
                 if line_stripped != last_error_message:
-                    last_error_message = line_stripped  # Update last error message
+                    last_error_message = line_stripped  # ✅ Prevent duplicate errors
                     for pline in prev_lines:
                         err_f.write(pline)
-                    err_f.write("\n" * 5)  # Add spacing between errors
+                    err_f.write("\n" * 5)  # ✅ Add spacing between errors
                     err_f.flush()
 
-def send_shutdown_command():
-    """Sends a shutdown command to the server via Web API."""
-    pass
-
 # ----- Main -----------------------------------------------------------------------------
-def main():
+async def main_menu():
+    """Displays the main menu and handles user input."""
     while True:
-        print("7 Days to Die Server Manager")
+        print("\n7 Days to Die Server Manager")
         print("============================")
         print("Choose an option:")
         print("")
         print("1. Install SteamCMD and Server")
         print("2. Update")
         print("3. Start Server")
+        print("4. Backup")
         print("9. Exit (Kills server if running)")
         choice = input("Enter your choice: ")
         if choice == "1":
@@ -412,13 +505,19 @@ def main():
         elif choice == "2":
             update()
         elif choice == "3":
-            asyncio.run(start())
+            await start()
+        elif choice == "4":
+            backup()
         elif choice == "9":
-            stop()
+            await stop()
         else:
             print("Invalid choice. Try again.")
 
-# Program
+def main():
+    """Starts the program and displays the menu."""
+    asyncio.run(main_menu())  # ✅ Calls main_menu() directly, no loop needed here
+
+# ----- Program  ----------------------------------------------------------------------------- 
 if __name__ == "__main__":
     print("7 Days Server Manager")
     print("Author: Njinir")
