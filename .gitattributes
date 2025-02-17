@@ -1,0 +1,5 @@
+# List files ignored from releases
+
+vip_list.txt export-ignore
+Virtual Environment.md export-ignore
+help_file.txt export-ignore
