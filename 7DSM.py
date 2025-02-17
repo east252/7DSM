@@ -41,18 +41,12 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 
-
-
-
-
 # ----- Global Variables -----------------------------------------------------------------------------
 
     # Telnet Variables
 TELNET_HOST="127.0.0.1"
 TELNET_PORT = 8081  # Remove quotes to make it an integer
 TELNET_PASSWORD="MySecretPassword123"
-telnet_reader = None
-telnet_writer = None
 
     # Server Config Variables
 SERVERCONFIG_LandClaimCount="5"
@@ -65,7 +59,7 @@ SERVERCONFIG_TelnetEnabled="true"
 SERVERCONFIG_TelnetPort="8081"
 SERVERCONFIG_TelnetPassword="MySecretPassword123"
 SERVERCONFIG_WebDashboardEnabled="true"
-SERVERCONFIG_TerminalWindowEnabled="false"
+SERVERCONFIG_TerminalWindowEnabled="true"
 SERVERCONFIG_UserDataFolder="./UserDataFolder"
 
     # Donor Buffer Settings
@@ -221,6 +215,7 @@ def update():
     
     print("Returning to main menu.")
 
+# Fix this to work with the new Telnet system.
 async def start():
     """Starts the server first, then waits 30 seconds before attempting Telnet connection."""
 
@@ -286,31 +281,7 @@ async def start():
         print(f"❌ Error launching the server: {e}")
         return
 
-    # **Wait 30 seconds before attempting Telnet**
-    print("⏳ Starting Server..... Waiting 30 seconds before connecting to Telnet.")
-    await asyncio.sleep(30)
-
-    # **Now attempt Telnet connection until successful**
-    while True:
-        await asyncio.sleep(10)  # Wait before retrying
-        if telnet_writer is not None:
-            print("✅ Telnet is already connected.")
-            break
-        print("🔌 Attempting Telnet connection...")
-        await telnet_connect()  # Retry Telnet connection until successful
-
-    # **Once Telnet is connected, start background Telnet tasks**
-    print("📡 Starting Telnet background services...")
-    await start_telnet_services()
-
-async def start_telnet_services():
-    """Starts Telnet-related background tasks including test commands."""
-    await telnet_connect()
-    asyncio.create_task(scheduled_player_data())  # Player data every 30 sec
-    asyncio.create_task(scheduled_announcements())  # Announcements every 10 min
-    asyncio.create_task(test_telnet_say())  # ✅ Correctly scheduled periodic test
-
-
+    # TODO: Add telnet connection after server is running.
 
 def server_config_override():
     """Overrides serverconfig.xml settings with global SERVERCONFIG_ variables."""
@@ -372,51 +343,19 @@ def server_config_override():
     print("✅ serverconfig.xml has been updated with correct indentation.")
 
 def join():
+    # TODO: Join a current server via Telnet.
     pass
 
-async def stop():
-    """Shuts down the server via Telnet, ensuring connection stays alive."""
-    global telnet_writer
-
-    print("⚠ Initiating server shutdown via Telnet...")
-
-    # **Debug Logging Before Sending Command**
-    print(f"🔍 Debug: telnet_writer before shutdown attempt: {telnet_writer}")
-
-    # **Ensure Telnet is still connected**
-    if telnet_writer is None:
-        print("⚠ Telnet is not connected. Attempting to reconnect before shutdown...")
-        await telnet_connect()
-
-    # **Ensure Telnet Writer is Not Lost**
-    print(f"🔍 Debug: telnet_writer after reconnect attempt: {telnet_writer}")
-
-    if telnet_writer is None:
-        print("❌ Telnet connection failed. Skipping shutdown command.")
-    else:
-        print("🟢 Sending shutdown command via Telnet (Attempt 1)...")
-        success = await telnet_send_command("shutdown")
-
-        await asyncio.sleep(5)
-
-        if is_server_running() and success:
-            print("🟢 Sending shutdown command via Telnet (Attempt 2)...")
-            await telnet_send_command("shutdown")
-
-        await asyncio.sleep(5)
-
+def stop():
+    """Stop the server gracefully."""
     if is_server_running():
-        print("⏳ Server still running... waiting 5 more seconds.")
-        await asyncio.sleep(5)
-
-    if is_server_running():
-        print("❌ Server did not shut down in time. Forcing termination.")
+        print("🟢 Server is running.")
         kill_server_process()
-
-    print("🔚 Exiting program.")
-    sys.exit(0)
-
-
+        print("🔴 Server is not running.")
+        sys.exit()
+    else:
+        print("🔴 Server is not running.")
+        sys.exit()
 
 def is_server_running():
     """Checks if the server executable is still running."""
@@ -431,7 +370,6 @@ def kill_server_process():
         if process.info["name"] == SERVER_EXE:
             print(f"🚨 Terminating process: {SERVER_EXE}")
             process.terminate()
-
 
 
 def restart():
@@ -495,150 +433,20 @@ def server_logging():
 def vip_list_load():
     pass
 
-async def attempt_connection():
-    """Attempts a single Telnet connection."""
-    global telnet_reader, telnet_writer
-    try:
-        print("🔌 Connecting to Telnet...")
-        telnet_reader, telnet_writer = await telnetlib3.open_connection(TELNET_HOST, TELNET_PORT)
-
-        # Read initial login prompt
-        login_prompt = await telnet_reader.readuntil("Please enter password:")
-        if "Please enter password:" in login_prompt:
-            telnet_writer.write(TELNET_PASSWORD + "\n")
-            await telnet_writer.drain()
-
-        print("✅ Telnet connected successfully.")
-        return True
-
-    except Exception as e:
-        print(f"❌ Telnet connection failed: {e}")
-        telnet_reader, telnet_writer = None, None
-        return False
-
+# TODO: Fix this function to work with the new Telnet system.
 async def telnet_connect():
-    """Ensures a persistent Telnet connection and logs its state."""
-    global telnet_reader, telnet_writer
+    """Connects to the Telnet server and logs in."""
+    pass
 
-    if telnet_writer is not None:
-        print("🔄 Telnet is already connected.")
-        return
-
-    while True:
-        try:
-            print("🔌 Connecting to Telnet...")
-            telnet_reader, telnet_writer = await telnetlib3.open_connection(
-                host=TELNET_HOST, 
-                port=TELNET_PORT
-            )
-
-            print(f"🔍 Debug: telnet_writer assigned: {telnet_writer}")
-
-            if telnet_writer is None:
-                print("❌ Telnet writer is None immediately after connection. Retrying...")
-                await asyncio.sleep(10)
-                continue
-
-            # ✅ Immediately send password (avoiding waiting for prompt)
-            telnet_writer.write(TELNET_PASSWORD + "\n")
-            await telnet_writer.drain()
-
-            # ✅ Read authentication response safely
-            try:
-                auth_resp = await asyncio.wait_for(telnet_reader.read(1024), timeout=2.0)
-                print(f"🔑 Telnet authenticated: {auth_resp.strip()}")
-            except asyncio.TimeoutError:
-                print("⚠ Warning: No immediate response after sending password. Assuming success.")
-
-            print(f"✅ Telnet connected successfully. Writer State: {telnet_writer}")
-            return
-
-        except Exception as e:
-            print(f"❌ Telnet connection failed: {e}")
-            print("⏳ Waiting 10 seconds before retrying Telnet connection...")
-            await asyncio.sleep(10)
-
-
+# TODO: Fix this to work with the new Telnet system.
 async def telnet_send_command(command):
     """Sends a command via Telnet, ensuring the connection remains open."""
-    global telnet_reader, telnet_writer
+    pass
 
-    print(f"📡 Sending Telnet command: {command}")
-
-    if telnet_writer is None or telnet_writer.is_closing():
-        print("⚠ Telnet connection lost. Attempting to reconnect...")
-        await telnet_connect()
-
-    if telnet_writer is None:
-        print("❌ Telnet connection failed. Skipping command.")
-        return False
-
-    try:
-        print(f"🔍 Debug: Writing to Telnet: {command}")
-
-        telnet_writer.write(command + "\n")
-        await telnet_writer.drain()
-
-        # ✅ **Handle cases where no response is received**
-        try:
-            response = await asyncio.wait_for(telnet_reader.readuntil("\n"), timeout=2.0)
-            print(f"✅ Telnet Response: {response.strip()}")
-        except asyncio.TimeoutError:
-            print("⚠ No response received. Assuming command executed successfully.")
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Telnet command failed: {e}")
-        return False
-
-async def test_telnet_say():
-    """Sends a periodic Telnet command 'say "Hello World"' every 30 seconds, ensuring Telnet remains connected."""
-    while True:
-        if telnet_writer is None or telnet_writer.is_closing():
-            print("⚠ Telnet connection lost. Attempting to reconnect...")
-            await telnet_connect()
-
-        print("📡 Testing Telnet with 'say \"Hello World\"'...")
-        success = await telnet_send_command('say "Hello World"')
-        if success:
-            print("✅ Test command sent successfully.")
-        else:
-            print("❌ Test command failed.")
-
-        await asyncio.sleep(30)  # Wait 30 seconds before the next test
-        
+# TODO: Fix this function to work with the new Telnet system.     
 async def telnet_disconnect():
     """Closes the Telnet session properly."""
-    global telnet_reader, telnet_writer
-
-    if telnet_writer is not None:
-        print("🔌 Closing Telnet connection...")
-        telnet_writer.close()
-        await telnet_writer.wait_closed()
-        telnet_reader, telnet_writer = None, None
-        print("✅ Telnet disconnected.")
-
-async def scheduled_player_data():
-    """Periodically pulls player data via Telnet."""
-    while True:
-        await asyncio.sleep(30)  # Run every 30 seconds
-        response = await telnet_send_command("lp")  # Example: "lp" lists players
-        if response:
-            print(f"📡 Player Data: {response}")  # Later, we’ll process it better
-
-async def scheduled_announcements():
-    """Sends rotating messages to players via Telnet."""
-    message_index = 0
-    while True:
-        await asyncio.sleep(600)  # Run every 10 minutes
-        message = announcement_messages[message_index]
-        await telnet_send_command(f"say {message}")  # "say" broadcasts to players
-        print(f"📢 Announcement sent: {message}")
-
-        message_index = (message_index + 1) % len(announcement_messages)  # Rotate messages
-
-
+    pass
 
 # ----- Main -----------------------------------------------------------------------------
 def main():
@@ -663,7 +471,7 @@ def main():
         elif choice == "4":
             join()
         elif choice == "9":
-            asyncio.run(test_telnet_say())
+            stop()
         else:
             print("Invalid choice. Try again.")
 
