@@ -607,7 +607,7 @@ async def test_telnet_say():
             print("❌ Test command failed.")
 
         await asyncio.sleep(30)  # Wait 30 seconds before the next test
-
+        
 async def telnet_disconnect():
     """Closes the Telnet session properly."""
     global telnet_reader, telnet_writer
@@ -745,7 +745,4 @@ Zombie spawner for admins
 Server messages
 Chat colors
 Vehice Retrieval
-
-
-
 """
