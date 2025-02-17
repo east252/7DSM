@@ -2,7 +2,7 @@
 
 ### 7 Days To Die Server Manager
 7DSM by Primal Rage Gaming  
-Version: 0.0.1  
+Version: 1.0.0  
 Author: Njinir  
 Created 2/2025  
 Primal Rage Gaming
