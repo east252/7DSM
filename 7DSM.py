@@ -1,5 +1,6 @@
 # ----- Introduction  -----------------------------------------------------------------------------
-# 7 Days Server Manager
+# 7 Days Server Manager 
+# Version: 0.0.1
 # Author: Njinir
 # Created: 2025
 # Primal Rage Gaming
@@ -7,7 +8,6 @@
 # This is a Python script for a 7 Days to Die server manager. 
 # It uses the 7 Days to Die server API to manage the server. 
 # It can start, stop, restart, and update the server. 
-# It can also send commands to the server and get the server status.
 
 # ----- Prerequistes -------------------------------------------------------------------------------
 """ TODO: Prerequisites:
@@ -16,12 +16,22 @@
 3. Place the program (7DSM.py) in a folder (this is your working folder).
 4. When steamcmd and server are installed, they will sit beside this folder.
 5. Install the prerequisites using python.
-"""
+6. Create a .env file in the working folder. (This is for your variables/settings)
+    NOTE: The .env file is customizable. Add any variables you want to change.
+7. Use python's pip to install the prerequisites: python -m pip install -r requirements.txt
 
-""" Python Prerequisites:
-via consle: pip install certifi, chardet, idna, psutil, python-dotenv, requests, telnetlib3, urllib3
+Example .env file:
 
-Then, fill out the global variables below, if they need changing.
+# Server Config Variables (overwrites serverconfig.xml. Add any others as needed.)
+SERVERCONFIG_LandClaimCount="5"
+SERVERCONFIG_LootAbundance="200"
+SERVERCONFIG_GameDifficulty="3"
+SERVERCONFIG_ServerName="Njinir"
+SERVERCONFIG_ServerPassword="MySecretPassword123"
+SERVERCONFIG_ServerMaxPlayerCount="10"
+SERVERCONFIG_WebDashboardEnabled="true"
+SERVERCONFIG_TerminalWindowEnabled="true"
+SERVERCONFIG_UserDataFolder="./UserDataFolder"
 """
 
 # ----- Libraries ------------------------------------------------------------------------------------
@@ -31,58 +41,15 @@ import os
 import psutil
 import re
 import requests
-import shutil
 import subprocess
 import sys
-import threading
-import telnetlib3
 import time
 import xml.etree.ElementTree as ET
 import zipfile
+from dotenv import load_dotenv
 
 
 # ----- Global Variables -----------------------------------------------------------------------------
-
-    # Telnet Variables
-TELNET_HOST="127.0.0.1"
-TELNET_PORT = 8081  # Remove quotes to make it an integer
-TELNET_PASSWORD="MySecretPassword123"
-
-    # Server Config Variables
-SERVERCONFIG_LandClaimCount="5"
-SERVERCONFIG_LootAbundance="200"
-SERVERCONFIG_GameDifficulty="3"
-SERVERCONFIG_ServerName="Njinir"
-SERVERCONFIG_ServerPassword="MySecretPassword123"
-SERVERCONFIG_ServerMaxPlayerCount="10"
-SERVERCONFIG_TelnetEnabled="true"
-SERVERCONFIG_TelnetPort="8081"
-SERVERCONFIG_TelnetPassword="MySecretPassword123"
-SERVERCONFIG_WebDashboardEnabled="true"
-SERVERCONFIG_TerminalWindowEnabled="true"
-SERVERCONFIG_UserDataFolder="./UserDataFolder"
-
-    # Donor Buffer Settings
-DONORBUFFER_ENABLED="true"
-DONORBUFFER_SLOTS="10"
-
-    # Server Messages
-announcement_messages = [
-    "Welcome to the server!",
-    "Need help? Check out our Discord.",
-    "Don't forget to claim your land!",
-]
-
-    # Server Settings
-
-
-    # Server Manager Commands
-SM_Donorlist = "donorlist"
-SM_DonorBuffer = "donorbuffer"
-SM_SetDonorBuffer = "setdonorbuffer"
-
-
-    # Global Variables for code
 SERVER_APP_ID = "294420"
 SERVER_DIR = os.path.abspath("Server")
 STEAMCMD_DIR = "steamcmd"
@@ -90,7 +57,7 @@ STEAMCMD_EXE = os.path.join(STEAMCMD_DIR, "steamcmd.exe")
 STEAMCMD_ZIP_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 STEAMCMD_ZIP_PATH = "steamcmd_temp.zip"
 SERVER_CONFIG_PATH = os.path.join(SERVER_DIR, "serverconfig.xml")
-SERVER_LOG_PATH = os.path.join("Server", "Logs")  # Path to logs to monitor Telnet readiness
+SERVER_LOG_PATH = os.path.join("Server", "Logs")
 SERVER_EXE = "7DaysToDieServer.exe"
 
 # ----- Functions / Definitions -----------------------------------------------------------------------------
@@ -215,39 +182,32 @@ def update():
     
     print("Returning to main menu.")
 
-# Fix this to work with the new Telnet system.
-async def start():
-    """Starts the server first, then waits 30 seconds before attempting Telnet connection."""
 
-    # Ensure serverconfig.xml is up to date
-    server_config_override()
+async def start():
+    """Starts the 7DTD server with settings loaded from .env."""
+    server_config_override()  # ✅ Ensure the config is updated before launch
 
     server_path = os.path.abspath("Server")
-    executable = os.path.join(server_path, SERVER_EXE)
+    executable = os.path.join(server_path, os.getenv("SERVER_EXE", "7DaysToDieServer.exe"))
 
     if not os.path.exists(executable):
-        executable = os.path.join(server_path, "7DaysToDie.exe")
-        if not os.path.exists(executable):
-            print("❌ Error: Neither 7DaysToDieServer.exe nor 7DaysToDie.exe found.")
-            return
+        print(f"❌ Error: {executable} not found.")
+        return
 
     logs_dir = os.path.join(server_path, "Logs")
     os.makedirs(logs_dir, exist_ok=True)
 
     config_file = os.path.join(server_path, "serverconfig.xml")
     if not os.path.exists(config_file):
-        print(f"❌ Error: serverconfig.xml not found in {server_path}.")
+        print("❌ Error: serverconfig.xml not found.")
         return
 
-    # Prepare logs
     log_timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
     main_log_path = os.path.join(logs_dir, f"log_{log_timestamp}.txt")
     error_log_path = os.path.join(logs_dir, f"error_{log_timestamp}.txt")
 
-    print(f"🚀 Starting server, main logs -> {main_log_path}")
-    print(f"⚠ Error logs -> {error_log_path}")
+    print(f"🚀 Starting server, logs -> {main_log_path}")
 
-    # Start the server process **before** connecting to Telnet
     command = [
         executable,
         "-quit", "-batchmode", "-nographics",
@@ -256,7 +216,7 @@ async def start():
     ]
 
     try:
-        os.chdir(server_path)  # Ensure correct working directory
+        os.chdir(server_path)
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
@@ -265,104 +225,115 @@ async def start():
             text=True
         )
 
-        # Start log streaming in a separate thread
-        threading.Thread(
-            target=stream_logs_to_files,
-            args=(process, main_log_path, error_log_path),
-            daemon=True
-        ).start()
-
-        # Start monitoring thread
-        threading.Thread(target=monitor_server, args=(process,), daemon=True).start()
-
-        print("✅ Server started successfully. Logs are being captured.")
+        print("✅ Server started successfully.")
 
     except Exception as e:
         print(f"❌ Error launching the server: {e}")
-        return
 
-    # TODO: Add telnet connection after server is running.
 
 def server_config_override():
-    """Overrides serverconfig.xml settings with global SERVERCONFIG_ variables."""
-    
-    # Ensure the config file exists
+    """Overrides serverconfig.xml settings with values from .env."""
+
     if not os.path.exists(SERVER_CONFIG_PATH):
         print("❌ serverconfig.xml not found. Cannot override settings.")
         return
-    
+
     print("🔧 Updating serverconfig.xml...")
 
-    # Get all global variables that start with SERVERCONFIG_
+    # Read all .env variables that start with "SERVERCONFIG_"
     server_config_vars = {
         key.replace("SERVERCONFIG_", "").lower(): value
-        for key, value in globals().items() if key.startswith("SERVERCONFIG_")
+        for key, value in os.environ.items() if key.startswith("SERVERCONFIG_")
     }
 
     # Load and parse the XML file
     tree = ET.parse(SERVER_CONFIG_PATH)
     root = tree.getroot()
 
-    # Track which keys were updated
     updated_keys = set()
 
-    # Process existing <property> entries
+    # Update existing properties
     for prop in root.findall("property"):
         name = prop.get("name", "").lower()
         if name in server_config_vars:
-            prop.set("value", server_config_vars[name])  # Update value
+            prop.set("value", server_config_vars[name])
             updated_keys.add(name)
 
-    # Add missing properties at the end
+    # Add missing properties
     for key, value in server_config_vars.items():
         if key not in updated_keys:
             ET.SubElement(root, "property", name=key, value=value)
 
-    # Convert tree back to a formatted XML string
+    # Convert tree to formatted XML
     xml_string = ET.tostring(root, encoding="unicode")
 
-    # **FORCE** `</ServerSettings>` onto a new line
+    # Force `</ServerSettings>` to a new line
     xml_string = re.sub(r"(\s*)</ServerSettings>", r"\n</ServerSettings>", xml_string)
 
-    # **FORCE** proper indentation for `<property>` entries
+    # Properly indent `<property>` entries
     formatted_lines = []
     for line in xml_string.splitlines():
         stripped_line = line.strip()
         if stripped_line.startswith("<property"):
-            formatted_lines.append(f"\t{stripped_line}")  # Indent properties
+            formatted_lines.append(f"\t{stripped_line}")
         elif stripped_line == "</ServerSettings>":
-            formatted_lines.append("")  # Add an empty line before closing tag
-            formatted_lines.append("</ServerSettings>")  # Ensure no indentation
+            formatted_lines.append("")
+            formatted_lines.append("</ServerSettings>")
         else:
             formatted_lines.append(line)
 
-    # Write the cleaned-up XML file
     with open(SERVER_CONFIG_PATH, "w", encoding="utf-8") as file:
         file.write("\n".join(formatted_lines) + "\n")
 
-    print("✅ serverconfig.xml has been updated with correct indentation.")
+    print("✅ serverconfig.xml updated successfully.")
 
-def join():
-    # TODO: Join a current server via Telnet.
-    pass
+async def monitor_server():
+    """Continuously checks if the server is running and restarts if it stops."""
+    server_exe = os.getenv("SERVER_EXE", "7DaysToDieServer.exe")
+    server_path = os.path.abspath("Server")
+    executable = os.path.join(server_path, server_exe)
 
-def stop():
-    """Stop the server gracefully."""
-    if is_server_running():
-        print("🟢 Server is running.")
+    while True:
+        # Check if the server process is running
+        server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
+
+        if not server_running:
+            print("❌ Server process not found. Restarting server...")
+            await start()  # ✅ Restart the server
+
+        time.sleep(10)  # ✅ Check every 10 seconds
+
+async def stop():
+    """Stops the game server gracefully if possible, otherwise forces termination."""
+    server_exe = os.getenv("SERVER_EXE", "7DaysToDieServer.exe")
+
+    # Step 1: Check if the server is running
+    server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
+
+    if not server_running:
+        print("⚠ Server is not running.")
+        return
+
+    print("⚠ Initiating server shutdown...")
+
+    # Step 2: Attempt a graceful shutdown
+    try:
+        await send_shutdown_command()  # ✅ Implement this to send a shutdown command via Web API
+        print("⏳ Waiting 10 seconds for the server to shut down...")
+        time.sleep(10)
+    except Exception as e:
+        print(f"❌ Error attempting graceful shutdown: {e}")
+
+    # Step 3: Check if the server is still running
+    server_running = any(proc.info["name"] == server_exe for proc in psutil.process_iter(["name"]))
+
+    if server_running:
+        print("❌ Server did not shut down. Forcing termination...")
         kill_server_process()
-        print("🔴 Server is not running.")
-        sys.exit()
-    else:
-        print("🔴 Server is not running.")
-        sys.exit()
 
-def is_server_running():
-    """Checks if the server executable is still running."""
-    for process in psutil.process_iter(["name"]):
-        if process.info["name"] == SERVER_EXE:
-            return True
-    return False
+    print("✅ Server stopped.")
+    sys.exit(0)
+
 
 def kill_server_process():
     """Finds and forcefully kills the server process."""
@@ -374,14 +345,6 @@ def kill_server_process():
 
 def restart():
     pass
-
-def monitor_server(proc):
-    """Monitors the server process and detects crashes."""
-    while True:
-        if proc.poll() is not None:
-            print("❌ Server process terminated unexpectedly.")
-            break
-        time.sleep(5)
 
 def server_backup():
     pass
@@ -427,25 +390,8 @@ def stream_logs_to_files(proc, main_log, error_log):
                     err_f.write("\n" * 5)  # Add spacing between errors
                     err_f.flush()
 
-def server_logging():
-    pass
-
-def vip_list_load():
-    pass
-
-# TODO: Fix this function to work with the new Telnet system.
-async def telnet_connect():
-    """Connects to the Telnet server and logs in."""
-    pass
-
-# TODO: Fix this to work with the new Telnet system.
-async def telnet_send_command(command):
-    """Sends a command via Telnet, ensuring the connection remains open."""
-    pass
-
-# TODO: Fix this function to work with the new Telnet system.     
-async def telnet_disconnect():
-    """Closes the Telnet session properly."""
+def send_shutdown_command():
+    """Sends a shutdown command to the server via Web API."""
     pass
 
 # ----- Main -----------------------------------------------------------------------------
@@ -458,7 +404,6 @@ def main():
         print("1. Install SteamCMD and Server")
         print("2. Update")
         print("3. Start Server")
-        print("4. Join Telnet (Server must already be running)")
         print("9. Exit (Kills server if running)")
         choice = input("Enter your choice: ")
         if choice == "1":
@@ -468,8 +413,6 @@ def main():
             update()
         elif choice == "3":
             asyncio.run(start())
-        elif choice == "4":
-            join()
         elif choice == "9":
             stop()
         else:
@@ -483,74 +426,3 @@ if __name__ == "__main__":
     print("Primal Rage Gaming")
     print("")
     main()
-
-
-""" Goals and Versioning
-7DSM
-
-Version 0.0.0.1
-- [✅] virtual environment
-- [✅] gitignore the steamcmd and server files
-- [✅] install server beside, not in, the steamcmd folder
-- [✅] allow install of prerequisites from SM menu.
-- [✅] enforce telnet true, port, pass from .env file
-- [✅] allow update of the server, include validate
-- [✅] allow overwrite serverconfig.xml from .env
-- [✅] log stamp and flow all logs from server to file
-- [✅] ignore or remove WARNING: Shader and ERROR: Shader lines
-- [✅] Exit menu which kills the running server instance
-- [✅] Send commands to telnet
-- [✅] properly display response from telnet into SM
-- [✅] Graceful shutdown of server initiated from SM
-- [✅] Restart if game crashes
-- [✅] Separate error log. 20 lines, 5x separated, if WRN,ERR, Exception
-
-Version 0.0.0.2
-- [] Rebuild from the ground up to incorporate the telnet control.
-- [✅] virtual environment
-- [✅] gitignore the steamcmd and server files
-- [✅] install server beside, not in, the steamcmd folder
-- [⛔] allow install of prerequisites from SM menu. - Removed Task
-- [✅] enforce telnet true, port, pass from .env file
-- [✅] allow update of the server, include validate
-- [✅] allow overwrite serverconfig.xml from .env !! Changed to from global variables !!
-- [✅] log stamp and flow all logs from server to file
-- [✅] ignore or remove WARNING: Shader and ERROR: Shader lines
-- [] Exit menu which kills the running server instance
-- [] Send commands to telnet
-- [] properly display response from telnet into SM
-- [] Graceful shutdown of server initiated from SM
-- [] Restart if game crashes
-- [] Separate error log. 20 lines, 5x separated, if WRN,ERR, Exception
-- [] Donor buffer has to be created
-- [] See if webmap exists already before rewriting
-- [] Command to print out all expired claims for admins to hunt down
-- [] Donor slot system/vip system
-- [] Reset Region Functionality
-- [] Server Messages
-- [] Save and backup systems
-- [] Change C++ redist from menu to auto install
-
-
-Version 0.0.0.3
-- [] Staff or Hard teleports (ftw/type)
-- [] Discord Integration
-- [] Ping ban
-
-Version 0.0.0.4
-- [] Player teleports
-
-
-To Do List:
-Reset Regions
-Webmap
-Expired landclaim view
-Discord integration
-Giveplus
-Reset Level
-Reset Skills
-Zombie spawner for admins
-Server messages
-Chat colors
-Vehice Retrieval
-"""
