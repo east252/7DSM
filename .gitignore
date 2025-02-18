@@ -1,6 +1,4 @@
+# List files that will not be uploaded
 env/
 steamcmd/
 server/
-vip_list.txt
-Virtual Environment.md
-help_file.txt
