@@ -100,7 +100,7 @@ def install_server():
         stderr_output = process.stderr.read().strip()
 
         if process.returncode != 0 and not any(keyword in stderr_output for keyword in ["Update complete", "Cleaning up", "Installing update"]):
-            print(f"❌ Error during installation: {stderr_output}")
+            print(f"❌ Possible error during installation: {stderr_output}. Review the line above.")
         else:
             print("✅ 7 Days to Die installation complete. The server was NOT launched.")
 
