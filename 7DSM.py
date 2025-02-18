@@ -27,6 +27,7 @@ STEAMCMD_EXE = os.path.join(STEAMCMD_DIR, "steamcmd.exe")
 STEAMCMD_ZIP_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 STEAMCMD_ZIP_PATH = "steamcmd_temp.zip"
 SERVER_CONFIG_PATH = os.path.join(SERVER_DIR, "serverconfig.xml")
+SERVERADMIN_PATH = os.path.join("Server", "UserDataFolder", "Saves", "serveradmin.xml")
 SERVER_LOG_PATH = os.path.join("Server", "Logs")
 SERVER_EXE = "7DaysToDieServer.exe"
 
@@ -158,6 +159,7 @@ def update():
 async def start():
     """Starts the 7DTD server with settings from global variables."""
     server_config_override()  # ✅ Ensure the config is updated before launch
+    update_serveradmin_tokens() # ✅ Ensure the web token is installed before launch.
 
     executable = os.path.join(SERVER_DIR, SERVER_EXE)  # ✅ Corrected to use global variable
 
@@ -210,9 +212,6 @@ async def start():
     except Exception as e:
         print(f"❌ Error launching the server: {e}")
 
-
-
-
 def server_config_override():
     """Ensures serverconfig.xml matches the values from .env by updating, adding missing entries, and cleaning up formatting."""
 
@@ -221,7 +220,6 @@ def server_config_override():
         return
 
     print("🔧 Updating serverconfig.xml...")
-
 
     # ✅ Read all .env variables that start with "SERVERCONFIG_"
     server_config_vars = {
@@ -274,11 +272,71 @@ def server_config_override():
 
     print("✅ serverconfig.xml updated successfully.")
 
-import threading
+def update_serveradmin_tokens():
+    """Ensures serveradmin.xml contains the correct API token settings from .env."""
+
+    if not os.path.exists(SERVERADMIN_PATH):
+        print("❌ serveradmin.xml not found. Cannot update API tokens.")
+        return
+
+    print("🔧 Updating serveradmin.xml...")
+
+    # ✅ Read all .env variables that start with "APITOKEN_"
+    api_token_vars = {
+        key.replace("APITOKEN_", "").lower(): value
+        for key, value in os.environ.items() if key.startswith("APITOKEN_")
+    }
+
+    # Ensure required values exist
+    name = api_token_vars.get("name")
+    secret = api_token_vars.get("secret")
+    permission_level = api_token_vars.get("permission")
+
+    if not all([name, secret, permission_level]):
+        print("❌ Missing required APITOKEN values in .env. Skipping update.")
+        return
+
+    # Load and parse the XML file
+    tree = ET.parse(SERVERADMIN_PATH)
+    root = tree.getroot()
+
+    # Find or create the <apitokens> section
+    apitokens = root.find("apitokens")
+    if apitokens is None:
+        apitokens = ET.SubElement(root, "apitokens")
+
+    # ✅ Remove any existing token entries
+    for token in apitokens.findall("token"):
+        apitokens.remove(token)
+
+    # ✅ Add new token entry
+    ET.SubElement(apitokens, "token", name=name, secret=secret, permission_level=permission_level)
+
+    # ✅ Format the XML properly
+    xml_string = ET.tostring(root, encoding="unicode")
+
+    # ✅ Ensure proper indentation for `<token>` entries
+    formatted_lines = []
+    for line in xml_string.splitlines():
+        stripped_line = line.strip()
+        if stripped_line.startswith("<token"):
+            formatted_lines.append(f"\t{stripped_line}")
+        elif stripped_line == "</apitokens>":
+            formatted_lines.append("")
+            formatted_lines.append("</apitokens>")
+        else:
+            formatted_lines.append(line)
+
+    # ✅ Save the cleaned-up XML file
+    with open(SERVERADMIN_PATH, "w", encoding="utf-8") as file:
+        file.write("\n".join(formatted_lines) + "\n")
+
+    print("✅ serveradmin.xml updated successfully.")
 
 async def monitor_server():
     """Continuously checks if the server is running and restarts if it stops."""
     print("🛠️ Server monitoring started...")
+    await asyncio.sleep(5)
 
     while True:
         # ✅ Check if the server process is running
