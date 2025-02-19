@@ -15,6 +15,7 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 
+from datetime import datetime
 from dotenv import load_dotenv
 import zstandard as zstd  # ✅ High-speed compression
 
@@ -80,8 +81,14 @@ SERVER_CONFIG_PATH = os.path.join(SERVER_DIR, "serverconfig.xml")
 SERVERADMIN_PATH = os.path.join("Server", "UserDataFolder", "Saves", "serveradmin.xml")
 SERVER_LOG_PATH = os.path.join("Server", "Logs")
 SERVER_EXE = "7DaysToDieServer.exe"
-api = ServerAPI(base_url="http://localhost:8080") 
+DONORBUFFER_ENABLED = os.getenv("DONORBUFFER_Enabled", "false").lower() == "true"
+DONORBUFFER_SIZE = int(os.getenv("DONORBUFFER_Size", "0"))
+VIP_LIST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vip_list.txt")
+MAX_PLAYERS = 0
+CURRENT_PLAYERS = 0  # ✅ Initialize globally
+STEAM_AUTH_DELAY = 2  # ✅ Give Steam 2 seconds to authenticate before kicking
 
+api = ServerAPI(base_url="http://localhost:8080") 
 # ----- Functions / Definitions -------------------------------------------------------------------
 
 def install_steam():
@@ -553,27 +560,34 @@ def backup():
     print(f"⏱️ Backup process took {elapsed_time:.2f} seconds.")
 
 def stream_logs_to_files(proc, main_log, error_log):
-    """Streams server logs to separate files in real-time."""
+    """Streams server logs and extracts player-related data in real-time, properly handling errors."""
+    global MAX_PLAYERS, CURRENT_PLAYERS
+
     CONTEXT_SIZE = 20
     prev_lines = collections.deque(maxlen=CONTEXT_SIZE)
 
-    # Improved regex to exclude less critical warnings
     error_regex = re.compile(r'\b(ERR|EXCEPTION|CRITICAL|FATAL|ERROR)\b', re.IGNORECASE)
+    shader_regex = re.compile(r'\b(Shader)\b', re.IGNORECASE)  # ✅ Ignore all Shader-related logs
+    max_players_regex = re.compile(r"Maximum allowed players: (\d+)")
+    player_count_regex = re.compile(r"Ply:\s*(\d+)")
+    player_join_regex = re.compile(r"PlayerLogin:\s*(.+)")
+    steam_id_regex = re.compile(r"PltfmId='(Steam_\d+)'")
+    steam_auth_regex = re.compile(r"\[Steamworks\.NET\] Authenticating player: (.+) SteamId: (\d+)")
 
-    # Track the last error to prevent duplicates
-    last_error_message = None
+    # ✅ Temporary storage for player names before Steam authentication
+    pending_auth = {}
 
     with open(main_log, 'w', encoding='utf-8') as main_f, \
          open(error_log, 'w', encoding='utf-8') as err_f:
 
-        for line in iter(proc.stdout.readline, ''):  # ✅ Reads output in real-time
+        for line in iter(proc.stdout.readline, ''):
             if not line and proc.poll() is not None:
                 break
 
             line_stripped = line.strip()
 
-            # ✅ Ignore shader warnings/errors
-            if "Shader" in line_stripped:
+            # ✅ Ignore Shader warnings/errors
+            if shader_regex.search(line_stripped):
                 continue
 
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -582,17 +596,119 @@ def stream_logs_to_files(proc, main_log, error_log):
             # ✅ Write to main log
             main_f.write(formatted_line)
             main_f.flush()
-
             prev_lines.append(formatted_line)
 
-            # ✅ Write errors to error log
+            # ✅ Extract Max Players
+            match_max_players = max_players_regex.search(line_stripped)
+            if match_max_players:
+                MAX_PLAYERS = int(match_max_players.group(1))
+                print(f"🎯 Updated Max Players: {MAX_PLAYERS}")
+
+            # ✅ Extract Current Players
+            match_player_count = player_count_regex.search(line_stripped)
+            if match_player_count:
+                CURRENT_PLAYERS = int(match_player_count.group(1))
+                print(f"🎯 Updated Player Count: {CURRENT_PLAYERS}")
+
+            # ✅ Detect Player Join (Store in pending_auth)
+            match_login = player_join_regex.search(line_stripped)
+            if match_login:
+                player_name = match_login.group(1)
+                pending_auth[player_name] = None  # ✅ Store name, waiting for Steam ID
+
+            # ✅ Detect Steam ID (Assign to the correct player)
+            match_steam = steam_id_regex.search(line_stripped)
+            if match_steam:
+                steam_id = match_steam.group(1)
+
+                # ✅ Find player name from pending_auth
+                for name in list(pending_auth.keys()):
+                    if pending_auth[name] is None:
+                        pending_auth[name] = steam_id
+                        print(f"🟢 Player Joined: {name} ({steam_id})")
+                        break
+
+            # ✅ Detect Steam authentication log
+            match_auth = steam_auth_regex.search(line_stripped)
+            if match_auth:
+                player_name = match_auth.group(1)
+                steam_id = f"Steam_{match_auth.group(2)}"
+                print(f"✅ Steam Authentication Complete: {player_name} ({steam_id})")
+
+                # ✅ Now enforce VIP check
+                enforce_vip_access(player_name, steam_id)
+
+            # ✅ Write errors to error log (with 20-line buffer)
             if error_regex.search(line_stripped):
-                if line_stripped != last_error_message:
-                    last_error_message = line_stripped  # ✅ Prevent duplicate errors
-                    for pline in prev_lines:
-                        err_f.write(pline)
-                    err_f.write("\n" * 5)  # ✅ Add spacing between errors
-                    err_f.flush()
+                print(f"🚨 ERROR DETECTED: {line_stripped}")  # ✅ Print error immediately for debugging
+                for pline in prev_lines:  # ✅ Write last 20 lines before error
+                    err_f.write(pline)
+                err_f.write("\n" * 5)  # ✅ Add spacing between errors
+                err_f.flush()
+
+def is_vip(steam_id):
+    """Checks if a Steam ID is in the VIP list and not expired."""
+    if not os.path.exists(VIP_LIST_PATH):
+        print(f"❌ ERROR: VIP list not found at {VIP_LIST_PATH}. No one is VIP.")
+        return False
+
+    try:
+        with open(VIP_LIST_PATH, "r", encoding="utf-8") as vip_file:
+            for line in vip_file:
+                parts = line.strip().split()
+                if len(parts) < 4:
+                    print(f"⚠️ Skipping malformed VIP entry: {line}")  # ✅ Debugging malformed lines
+                    continue  
+
+                vip_steam_id, vip_name, vip_exp_date, vip_time = parts
+                vip_steam_id = vip_steam_id.strip()
+                vip_exp_date = vip_exp_date.strip()
+                vip_time = vip_time.strip()
+
+                try:
+                    vip_expire_date = datetime.strptime(f"{vip_exp_date} {vip_time}", "%Y-%m-%d %H:%M:%S")
+                except ValueError as e:
+                    print(f"⚠️ Skipping invalid VIP entry: {line} ({e})")  # ✅ Debugging invalid date formats
+                    continue
+
+                print(f"🔍 Checking VIP: {vip_steam_id}, Expires: {vip_expire_date}")
+
+                if vip_steam_id == steam_id:
+                    if datetime.now() < vip_expire_date:
+                        print(f"✅ {steam_id} is VIP (expires {vip_expire_date})")
+                        return True  # ✅ VIP and not expired
+                    else:
+                        print(f"❌ {steam_id} is EXPIRED (expired on {vip_expire_date})")
+                        return False  
+
+    except FileNotFoundError:
+        print(f"❌ ERROR: VIP list missing at {VIP_LIST_PATH}. No one is VIP.")
+        return False  
+
+    print(f"❌ {steam_id} is NOT a VIP.")
+    return False
+
+def enforce_vip_access(player_name, steam_id):
+    """Checks if a joining player is VIP and kicks them if they are not."""
+    global CURRENT_PLAYERS
+
+    buffer_limit = MAX_PLAYERS - DONORBUFFER_SIZE
+
+    if CURRENT_PLAYERS < buffer_limit:
+        return  # ✅ Do nothing if we're not in buffer mode
+
+    print(f"⚠️ Donor Buffer ACTIVE! Checking {player_name} ({steam_id})...")
+
+    if is_vip(steam_id):
+        print(f"✅ {player_name} ({steam_id}) is VIP. Allowed to join.")
+        return
+
+    # ✅ Wait for Steam authentication before kicking
+    print(f"⏳ Waiting {STEAM_AUTH_DELAY} seconds for Steam authentication...")
+    time.sleep(STEAM_AUTH_DELAY)
+
+    print(f"❌ Kicking {player_name} ({steam_id}) - Not VIP")
+    api.post("command", {"command": f'kick {steam_id} "Thank you for visiting. We are at max capacity. VIPs only may join at this time."'})
 
 # ----- Functions (Server Manager Logic) -----
 def server_api_send():
