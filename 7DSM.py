@@ -608,7 +608,6 @@ def stream_logs_to_files(proc, main_log, error_log):
             match_player_count = player_count_regex.search(line_stripped)
             if match_player_count:
                 CURRENT_PLAYERS = int(match_player_count.group(1))
-                print(f"🎯 Updated Player Count: {CURRENT_PLAYERS}")
 
             # ✅ Detect Player Join (Store in pending_auth)
             match_login = player_join_regex.search(line_stripped)
@@ -625,7 +624,6 @@ def stream_logs_to_files(proc, main_log, error_log):
                 for name in list(pending_auth.keys()):
                     if pending_auth[name] is None:
                         pending_auth[name] = steam_id
-                        print(f"🟢 Player Joined: {name} ({steam_id})")
                         break
 
             # ✅ Detect Steam authentication log
@@ -633,14 +631,12 @@ def stream_logs_to_files(proc, main_log, error_log):
             if match_auth:
                 player_name = match_auth.group(1)
                 steam_id = f"Steam_{match_auth.group(2)}"
-                print(f"✅ Steam Authentication Complete: {player_name} ({steam_id})")
 
                 # ✅ Now enforce VIP check
                 enforce_vip_access(player_name, steam_id)
 
             # ✅ Write errors to error log (with 20-line buffer)
             if error_regex.search(line_stripped):
-                print(f"🚨 ERROR DETECTED: {line_stripped}")  # ✅ Print error immediately for debugging
                 for pline in prev_lines:  # ✅ Write last 20 lines before error
                     err_f.write(pline)
                 err_f.write("\n" * 5)  # ✅ Add spacing between errors
@@ -657,7 +653,6 @@ def is_vip(steam_id):
             for line in vip_file:
                 parts = line.strip().split()
                 if len(parts) < 4:
-                    print(f"⚠️ Skipping malformed VIP entry: {line}")  # ✅ Debugging malformed lines
                     continue  
 
                 vip_steam_id, vip_name, vip_exp_date, vip_time = parts
@@ -668,24 +663,17 @@ def is_vip(steam_id):
                 try:
                     vip_expire_date = datetime.strptime(f"{vip_exp_date} {vip_time}", "%Y-%m-%d %H:%M:%S")
                 except ValueError as e:
-                    print(f"⚠️ Skipping invalid VIP entry: {line} ({e})")  # ✅ Debugging invalid date formats
                     continue
-
-                print(f"🔍 Checking VIP: {vip_steam_id}, Expires: {vip_expire_date}")
 
                 if vip_steam_id == steam_id:
                     if datetime.now() < vip_expire_date:
-                        print(f"✅ {steam_id} is VIP (expires {vip_expire_date})")
                         return True  # ✅ VIP and not expired
                     else:
-                        print(f"❌ {steam_id} is EXPIRED (expired on {vip_expire_date})")
                         return False  
 
     except FileNotFoundError:
-        print(f"❌ ERROR: VIP list missing at {VIP_LIST_PATH}. No one is VIP.")
         return False  
 
-    print(f"❌ {steam_id} is NOT a VIP.")
     return False
 
 def enforce_vip_access(player_name, steam_id):
@@ -697,17 +685,11 @@ def enforce_vip_access(player_name, steam_id):
     if CURRENT_PLAYERS < buffer_limit:
         return  # ✅ Do nothing if we're not in buffer mode
 
-    print(f"⚠️ Donor Buffer ACTIVE! Checking {player_name} ({steam_id})...")
-
     if is_vip(steam_id):
-        print(f"✅ {player_name} ({steam_id}) is VIP. Allowed to join.")
         return
 
     # ✅ Wait for Steam authentication before kicking
-    print(f"⏳ Waiting {STEAM_AUTH_DELAY} seconds for Steam authentication...")
     time.sleep(STEAM_AUTH_DELAY)
-
-    print(f"❌ Kicking {player_name} ({steam_id}) - Not VIP")
     api.post("command", {"command": f'kick {steam_id} "Thank you for visiting. We are at max capacity. VIPs only may join at this time."'})
 
 # ----- Functions (Server Manager Logic) -----
