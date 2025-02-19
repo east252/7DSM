@@ -1,6 +1,7 @@
-# ----- Libraries ------------------------------------------------------------------------------------
+# ----- Imports -----------------------------------------------------------------------------------
 import asyncio
 import collections
+import json
 import os
 import psutil
 import re
@@ -17,9 +18,58 @@ import zipfile
 from dotenv import load_dotenv
 import zstandard as zstd  # ✅ High-speed compression
 
+# ----- Load Environment Variables ----------------------------------------------------------------
 
-# ----- Global Variables -----------------------------------------------------------------------------
-load_dotenv() # ✅ Load .env variables globally
+load_dotenv()
+
+# ----- Classes -----------------------------------------------------------------------------------
+
+class ServerAPI:
+    """Handles authentication and communication with the 7 Days to Die server API dynamically."""
+
+    def __init__(self, base_url):
+        """Initialize with API base URL and authentication details."""
+        self.base_url = base_url
+        self.token_name = os.getenv("APITOKEN_Name")
+        self.token_secret = os.getenv("APITOKEN_Secret")
+
+        if not self.token_name or not self.token_secret:
+            raise ValueError("❌ Missing API token credentials in .env file!")
+
+    def request(self, method, endpoint, data=None, params=None):
+        """Handles any API request dynamically (GET, POST, etc.)."""
+        url = f"{self.base_url}/api/{endpoint}"
+        headers = {
+            "X-SDTD-API-TOKENNAME": self.token_name,
+            "X-SDTD-API-SECRET": self.token_secret,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params)
+            elif method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=data)
+            else:
+                return {"status": "error", "message": "Invalid HTTP method"}
+
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.RequestException as e:
+            return {"status": "error", "message": f"Request failed: {e}"}
+
+    def get(self, endpoint, params=None):
+        """Shortcut for GET requests"""
+        return self.request("GET", endpoint, params=params)
+
+    def post(self, endpoint, data=None):
+        """Shortcut for POST requests"""
+        return self.request("POST", endpoint, data=data)
+
+# ----- Global Variables --------------------------------------------------------------------------
+
 SERVER_APP_ID = "294420"
 SERVER_DIR = os.path.abspath("Server")
 STEAMCMD_DIR = "steamcmd"
@@ -30,8 +80,9 @@ SERVER_CONFIG_PATH = os.path.join(SERVER_DIR, "serverconfig.xml")
 SERVERADMIN_PATH = os.path.join("Server", "UserDataFolder", "Saves", "serveradmin.xml")
 SERVER_LOG_PATH = os.path.join("Server", "Logs")
 SERVER_EXE = "7DaysToDieServer.exe"
+api = ServerAPI(base_url="http://localhost:8080") 
 
-# ----- Functions / Definitions -----------------------------------------------------------------------------
+# ----- Functions / Definitions -------------------------------------------------------------------
 
 def install_steam():
     """Downloads and extracts SteamCMD if not already installed."""
@@ -543,7 +594,52 @@ def stream_logs_to_files(proc, main_log, error_log):
                     err_f.write("\n" * 5)  # ✅ Add spacing between errors
                     err_f.flush()
 
-# ----- Main -----------------------------------------------------------------------------
+# ----- Functions (Server Manager Logic) -----
+def server_api_send():
+    """ Allows the user to interact with any API endpoint and returns to the main menu after execution. """
+    while True:
+        print("\n📡 API Interaction")
+        print("===================")
+        print("1. Fetch available commands")
+        print("2. Send a command to the server")
+        print("3. Get a list of game items")
+        print("4. Get a list of installed mods")
+        print("5. Custom API request")
+        print("9. Return to main menu")
+
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            response = api.get("command")
+        elif choice == "2":
+            command = input("Enter command: ").strip()
+            response = api.post("command", {"command": command})
+        elif choice == "3":
+            response = api.get("item")
+        elif choice == "4":
+            response = api.get("mods")
+        elif choice == "5":
+            endpoint = input("Enter API endpoint (without '/api/'): ").strip()
+            method = input("Enter HTTP method (GET/POST): ").strip().upper()
+            data = None
+            if method == "POST":
+                data_input = input("Enter JSON data for POST (or leave blank): ").strip()
+                data = {} if not data_input else eval(data_input)  # ⚠ Be careful with eval() in real-world use
+            response = api.request(method, endpoint, data=data)
+        elif choice == "9":
+            return  # ✅ Exit back to the main menu
+        else:
+            print("❌ Invalid choice. Try again.")
+            continue  # Loop again
+
+        # ✅ Pretty-print JSON response
+        print("\n➡️ API Response:")
+        print(json.dumps(response, indent=4))  # ✅ Formats response with indentation
+
+        input("\nPress Enter to return to the main menu...")  # ✅ Wait for user input before returning
+        return  # ✅ Ensures the function exits back to main menuTry again.")
+    
+# ----- Main --------------------------------------------------------------------------------------
 async def main_menu():
     """Displays the main menu and handles user input."""
     while True:
@@ -555,6 +651,7 @@ async def main_menu():
         print("2. Update")
         print("3. Start Server")
         print("4. Backup")
+        print("5. Server API")
         print("9. Exit (Kills server if running)")
         choice = input("Enter your choice: ")
         if choice == "1":
@@ -566,6 +663,8 @@ async def main_menu():
             await start()
         elif choice == "4":
             backup()
+        elif choice == "5":
+            server_api_send()
         elif choice == "9":
             await stop()
         else:
@@ -575,7 +674,8 @@ def main():
     """Starts the program and displays the menu."""
     asyncio.run(main_menu())  # ✅ Calls main_menu() directly, no loop needed here
 
-# ----- Program  ----------------------------------------------------------------------------- 
+# ----- Program  ----------------------------------------------------------------------------------
+ 
 if __name__ == "__main__":
     print("7 Days Server Manager")
     print("Author: Njinir")
