@@ -32,30 +32,30 @@ Primal Rage Gaming
     NOTE: The .env file is customizable. Add any variables you want to change.
 7. Use python's pip to install the prerequisites: python -m pip install -r requirements.txt
 
-# Example .env file:
-"""Server Config Variables"""
-SERVERCONFIG_LandClaimCount="5"
-SERVERCONFIG_LootAbundance="200"
-SERVERCONFIG_GameDifficulty="3"
-SERVERCONFIG_ServerName="Njinir"
-SERVERCONFIG_ServerPassword="MySecretPassword123"
-SERVERCONFIG_ServerMaxPlayerCount="10"
-SERVERCONFIG_WebDashboardEnabled="true"
-SERVERCONFIG_TerminalWindowEnabled="true"
+# Example .env file:  
+"""Server Config Variables"""  
+SERVERCONFIG_LandClaimCount="5"  
+SERVERCONFIG_LootAbundance="200"  
+SERVERCONFIG_GameDifficulty="3"  
+SERVERCONFIG_ServerName="Njinir"  
+SERVERCONFIG_ServerPassword="MySecretPassword123"  
+SERVERCONFIG_ServerMaxPlayerCount="10"  
+SERVERCONFIG_WebDashboardEnabled="true"  
+SERVERCONFIG_TerminalWindowEnabled="true"  
 
-"""Save file. Do not change this value."""
-SERVERCONFIG_UserDataFolder="./UserDataFolder"
+"""Save file. Do not change this value."""  
+SERVERCONFIG_UserDataFolder="./UserDataFolder"  
 
-"""Backup Config Variables - if not top level, use _ to separate folders."""
-BACKUPCONFIG_UserDataFolder="true"
-BACKUPCONFIG_Logs="true"
-BACKUPCONFIG_serverconfig.xml="true" 
-BACKUPCONFIG_Mods="true" # This is the folder where you can place your custom mods.
-BACKUPCONFIG_LocalPrefabs="true" # This is the folder where you can place your custom prefabs.
-BACKUPCONFIG_Data_Worlds="true" # This is the folder where your worlds are stored.
+"""Backup Config Variables - if not top level, use _ to separate folders."""  
+BACKUPCONFIG_UserDataFolder="true"  
+BACKUPCONFIG_Logs="true"  
+BACKUPCONFIG_serverconfig.xml="true"   
+BACKUPCONFIG_Mods="true" # This is the folder where you can place your custom mods.  
+BACKUPCONFIG_LocalPrefabs="true" # This is the folder where you can place your custom prefabs.  
+BACKUPCONFIG_Data_Worlds="true" # This is the folder where your worlds are stored.  
 
-""" Latest Experimental """ 
-INSTALLCONFIG_Experimental="true" # This will install the latest experimental version of the server.
+""" Latest Experimental """   
+INSTALLCONFIG_Experimental="true" # This will install the latest experimental version of the server.  
 
 # File Setup
 ```
